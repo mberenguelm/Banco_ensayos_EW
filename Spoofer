@@ -1,0 +1,46 @@
+function [p_out, valid_out_spoof] = Spoofer(p_in, valid_in, t, spoof_enable)
+
+% Spoofing PVT tipo carry-off (posición)
+% p_in: [3x1] NED (m)
+% valid_in: boolean (o 0/1)
+% t: tiempo (s)
+% enable: boolean (o 0/1)
+
+% ---------- Parámetros del ataque ----------
+t_sp   = 70;                 % inicio ataque (s)
+t_ramp = 25;                 % tiempo para alcanzar offset final (s)
+offset_final = [120; -80; 0];% NED (m) -> (N,E,D)
+% ------------------------------------------
+
+% Passthrough por defecto
+p_out = p_in;
+valid_out_spoof = valid_in;
+
+% Si no hay GNSS válido o no está activado, no atacar
+if ~spoof_enable || ~valid_in
+    return;
+end
+
+% Si entra NaN, se queda NaN (coherente con MATLAB)
+if any(isnan(p_in))
+    valid_out_spoof = false;
+    return;
+end
+
+% Antes del ataque, no modificar
+if t < t_sp
+    return;
+end
+
+% Ganancia de arrastre (0→1)
+alpha = (t - t_sp) / t_ramp;
+if alpha < 0
+    alpha = 0;
+elseif alpha > 1
+    alpha = 1;
+end
+
+% Aplicar spoofing (carry-off)
+p_out = p_in + alpha * offset_final;
+valid_out_spoof = true;
+end
