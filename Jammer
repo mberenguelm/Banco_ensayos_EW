@@ -1,0 +1,28 @@
+function [p_out, valid_out_jam] = Jammer(p_in, valid_in, t, jam_enable)
+
+% ===== Parámetros (IGUAL que MATLAB) =====
+t_on = 40; t_off = 110;
+sigma_pos = 1.5;      % el nominal
+sigma_mult = 8;
+p_dropout = 0.25;
+% =======================================
+
+% Passthrough
+p_out = p_in;
+valid_out_jam = valid_in;
+
+attack_on = jam_enable && (t >= t_on) && (t <= t_off);
+
+if attack_on
+    % Degradación: ruido extra
+    p_out = p_in + sigma_mult*sigma_pos*randn(3,1);
+
+    % Dropout: NaN con prob. p_dropout
+    if rand < p_dropout
+        p_out = [NaN;NaN;NaN];
+        valid_out_jam = false;
+    else
+        valid_out_jam = true; %
+    end
+end
+end
