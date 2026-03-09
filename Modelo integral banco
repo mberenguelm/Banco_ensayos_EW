@@ -1,0 +1,171 @@
+%% TFM - Banco de ensayos GNSS (NED)
+% Marco: NED (North-East-Down)
+clear; close all; clc;
+
+%% 0) Tiempo
+fs = 5;                 
+T  = 180;                
+t  = (0:1/fs:T)';        
+N  = numel(t);
+dt = 1/fs;
+
+%% 1) Trayectoria verdadera (NED)
+R = 50;                 
+w = 0.05;            
+vd = -0.15;   % Down velocity (negativo = asciende)
+
+p_true = [ R*cos(w*t), ...          % North
+           R*sin(w*t) ,...         % East
+           -20 + vd*t ];        % Down (empieza a -10 m)
+
+v_true = [ -R*w*sin(w*t),...
+            R*w*cos(w*t),...
+            vd*ones(N,1) ];
+
+%% 2) GNSS nominal
+sigma_pos = 1.5;       
+sigma_vel = 0.1;       
+sigma_bias_rw = 0.02;  
+tau_mp = 20;           
+sigma_mp = 0.6;        
+
+% Bias random walk
+bias = zeros(N,3);
+for i=2:N
+    bias(i,:) = bias(i-1,:) + sigma_bias_rw*sqrt(dt)*randn(1,3);
+end
+
+% Multipath Gauss-Markov
+mp = zeros(N,3);
+a = exp(-dt/tau_mp);
+q = sigma_mp*sqrt(1-a^2);
+for i=2:N
+    mp(i,:) = a*mp(i-1,:) + q*randn(1,3);
+end
+
+p_gnss = p_true + bias + mp + sigma_pos*randn(N,3);
+v_gnss = v_true + sigma_vel*randn(N,3);
+
+%% 3) Jamming
+t_on = 40; t_off = 110;
+sigma_mult = 8;
+p_dropout = 0.25;
+
+p_jam = p_gnss;
+v_jam = v_gnss;
+cn0 = 45*ones(N,1);
+
+idx = (t>=t_on & t<=t_off);
+
+p_jam(idx,:) = p_jam(idx,:) + sigma_mult*sigma_pos*randn(sum(idx),3);
+v_jam(idx,:) = v_jam(idx,:) + sigma_mult*sigma_vel*randn(sum(idx),3);
+
+drop = idx & (rand(N,1)<p_dropout);
+p_jam(drop,:) = NaN;
+v_jam(drop,:) = NaN;
+
+cn0(idx) = 30;
+cn0(drop) = 0;
+
+%% 4) Spoofing (carry-off)
+t_sp = 70;
+t_ramp = 25;
+offset_final = [120, -80, 0]; % NED
+
+p_spoof = p_gnss;
+alpha = zeros(N,1);
+
+idx = t>=t_sp;
+tau = t(idx)-t_sp;
+alpha(idx) = min(max(tau/t_ramp,0),1);
+
+p_spoof = p_spoof + alpha.*offset_final;
+
+%% 5) Meaconing (delay)
+t_mea = 60;
+delay = 8;
+kdelay = round(delay/dt);
+offset_mea = [15,10,0];
+
+p_meac = p_gnss;
+
+for i=find(t>=t_mea,1):N
+    j = i-kdelay;
+    if j>=1
+        p_meac(i,:) = p_gnss(j,:) + offset_mea;
+    else
+        p_meac(i,:) = NaN;
+    end
+end
+
+%% ==================== GRÁFICAS ====================
+
+%% Trayectoria 3D NED
+figure;
+plot3(p_true(:,2), p_true(:,1), -p_true(:,3), 'LineWidth',2); hold on;
+plot3(p_gnss(:,2), p_gnss(:,1), -p_gnss(:,3), '.');
+plot3(p_jam(:,2),  p_jam(:,1),  -p_jam(:,3),  '.');
+plot3(p_spoof(:,2),p_spoof(:,1),-p_spoof(:,3),'.');
+plot3(p_meac(:,2), p_meac(:,1), -p_meac(:,3), '.');
+
+grid on; axis equal;
+xlabel('East (m)');
+ylabel('North (m)');
+zlabel('Up (m)');
+title('Efecto en la trayectoria de los ataques (3D) ');
+legend('Verdad','GNSS','Jamming','Spoofing','Meaconing');
+
+%% Errores
+err_nom = p_gnss - p_true;
+err_jam = p_jam  - p_true;
+err_sp  = p_spoof - p_true;
+err_mea = p_meac - p_true;
+
+figure('Name','Errores por ejes (N,E,D)');
+subplot(3,1,1)
+plot(t,err_nom(:,1)); hold on;
+plot(t,err_jam(:,1));
+plot(t,err_sp(:,1));
+plot(t,err_mea(:,1));
+ylabel('Error North (m)'); grid on;
+
+subplot(3,1,2)
+plot(t,err_nom(:,2)); hold on;
+plot(t,err_jam(:,2));
+plot(t,err_sp(:,2));
+plot(t,err_mea(:,2));
+ylabel('Error East (m)'); grid on;
+
+subplot(3,1,3)
+plot(t,err_nom(:,3)); hold on;
+plot(t,err_jam(:,3));
+plot(t,err_sp(:,3));
+plot(t,err_mea(:,3));
+ylabel('Error Down (m)');
+xlabel('t (s)');
+grid on;
+legend('Nominal','Jamming','Spoofing','Meaconing','Location','best');
+
+figure;
+plot(t, vecnorm(err_nom,2,2),'LineWidth',1.4); hold on;
+plot(t, vecnorm(err_jam,2,2),'LineWidth',1.4);
+plot(t, vecnorm(err_sp,2,2),'LineWidth',1.4);
+plot(t, vecnorm(err_mea,2,2),'LineWidth',1.4);
+grid on;
+xlabel('t (s)');
+ylabel('||error|| (m)');
+legend('Nominal','Jamming','Spoofing','Meaconing');
+title('Norma del error');
+
+%% C/N0 y disponibilidad
+figure;
+subplot(2,1,1)
+plot(t,cn0,'LineWidth',1.4);
+ylabel('C/N0 (dB-Hz)');
+grid on;
+
+subplot(2,1,2)
+stairs(t,~any(isnan(p_jam),2),'LineWidth',1.4);
+xlabel('t (s)');
+ylabel('Fix disponible');
+grid on;
