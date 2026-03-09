@@ -1,0 +1,24 @@
+function [p_ref, v_ref, a_ref] = Trayectoria(R,w,t)
+z_0=20;
+
+%Posiciones (trayectoria circular a altitud cte)
+x_ref= R*cos(w*t);
+y_ref= R*sin(w*t);
+z_ref= -z_0;
+
+
+p_ref= [x_ref;y_ref;z_ref];
+
+%Velocidades
+vx_ref= -R*w*sin(w*t);
+vy_ref= R*w*cos(w*t);
+vz_ref= 0;
+
+v_ref= [vx_ref;vy_ref;vz_ref];
+
+%Aceleraciones
+ax_ref= -R*w^2*cos(w*t);
+ay_ref= -R*w^2*sin(w*t);
+az_ref= 0;
+
+a_ref =[ax_ref;ay_ref;az_ref];
