@@ -1,0 +1,46 @@
+function [a_imu, v_ins, p_ins] = imu_ins_model(a_true, reset, p0, v0)
+
+dt = 0.01;
+sigma_a = 0.016667; %Ruido blanco del accel
+sigma_b = 1.6e-5;
+
+
+a_imu = zeros(3,1);
+v_ins = zeros(3,1);
+p_ins = zeros(3,1);
+
+
+a_true = a_true(:);
+p0     = p0(:);
+v0     = v0(:);
+
+persistent b v p
+if isempty(b)
+    b = zeros(3,1);
+    v = v0;
+    p = p0;
+end
+
+
+if reset
+    b = zeros(3,1);
+    v = v0;
+    p = p0;
+end
+
+% Bias RW
+b = b + sigma_b*sqrt(dt)*randn(3,1);
+
+% Ruido blanco
+n = sigma_a*randn(3,1);
+
+% Medida IMU (modelo simple)
+a_imu = a_true + b + n;
+
+% INS
+v = v + a_imu*dt;
+p = p + v*dt;
+
+v_ins = v;
+p_ins = p;
+end
